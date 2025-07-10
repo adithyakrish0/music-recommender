@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: music-recommender
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SPOTIPY_CLIENT_ID
+        value: 8a1446211a6648adb16de14a18991937
+      - key: SPOTIPY_CLIENT_SECRET
+        value: 14a27936b1a548a79cef56500fcec1f3
+      - key: SPOTIPY_REDIRECT_URI
+        value: https://music-recommender-mll6.onrender.com/callback
+      - key: SECRET_KEY
+        value: a_random_secret_string_for_flask

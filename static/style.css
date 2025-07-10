@@ -1,0 +1,129 @@
+:root {
+  --spotify-green: #1DB954;
+  --spotify-dark: #191414;
+  --spotify-light: #FFFFFF;
+  --spotify-gray: #B3B3B3;
+  --spotify-dark-gray: #535353;
+}
+
+body {
+  background: linear-gradient(135deg, #121212 0%, #212121 100%);
+  color: var(--spotify-light);
+  font-family: 'Circular', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+}
+
+.navbar {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px);
+  padding: 15px 0;
+}
+
+.hero-section {
+  background: rgba(30, 30, 30, 0.5);
+  border-radius: 20px;
+  padding: 3rem;
+  margin: 2rem 0;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card {
+  background: rgba(40, 40, 40, 0.7);
+  border: none;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  height: 100%;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  background: rgba(50, 50, 50, 0.8);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+.card-img-top {
+  height: 200px;
+  object-fit: cover;
+}
+
+.card-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audio-preview {
+  width: 100%;
+  height: 30px;
+}
+
+.btn-success {
+  background-color: var(--spotify-green);
+  border-color: var(--spotify-green);
+}
+
+.btn-success:hover {
+  background-color: #1ed760;
+  border-color: #1ed760;
+}
+
+.btn-outline-light:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.save-track.btn-danger {
+  background-color: #e22134;
+  border-color: #e22134;
+}
+
+/* Audio player customization */
+audio::-webkit-media-controls-panel {
+  background-color: #333;
+}
+
+audio::-webkit-media-controls-play-button {
+  filter: invert(1);
+}
+/* Add these new styles */
+.spotify-login-btn {
+    display: block;
+    background: #1DB954;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    margin-top: 20px;
+    text-decoration: none;
+}
+
+.spotify-login-btn:hover {
+    background: #1ed760;
+    color: white;
+}
+
+.divider {
+    text-align: center;
+    margin: 20px 0;
+    position: relative;
+}
+
+.divider:before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.2);
+}
+
+.divider span {
+    background: linear-gradient(to bottom right, #191414, #1DB954);
+    padding: 0 10px;
+    position: relative;
+    z-index: 1;
+}
