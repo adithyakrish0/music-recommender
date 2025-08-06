@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session
+from flask_caching import Cache
 import pandas as pd
 import random
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -6,9 +7,17 @@ from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
 import requests
 from requests.auth import HTTPBasicAuth
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.neighbors import BallTree, NearestNeighbors
+from scipy.sparse import csr_matrix
+import numpy as np
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"  # Change this to a real secret key
+
+# Configure cache
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+cache.init_app(app)
 
 # Spotify API credentials
 SPOTIFY_CLIENT_ID = '8a1446211a6648adb16de14a18991937'
@@ -54,36 +63,120 @@ except Exception as e:
         'popularity': 50
     } for i in range(10)])
 
-vectorizer = TfidfVectorizer(stop_words='english')
 tfidf_matrix = None
 similarity_matrix = None
+feature_matrix = None
+vectorizer = None
 
 def initialize_recommendation_engine():
-    global tfidf_matrix, similarity_matrix
+    global feature_matrix, vectorizer, df  # Add 'df' to the global declaration
     try:
+        # Only vectorize text features
+        vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
         tfidf_matrix = vectorizer.fit_transform(df['combined_features'])
-        similarity_matrix = cosine_similarity(tfidf_matrix)
-        print("Recommendation engine initialized successfully")
+        
+        # Select and scale audio features
+        audio_features = ['danceability', 'energy', 'valence', 'tempo']
+        audio_scaler = MinMaxScaler()
+        audio_matrix = audio_scaler.fit_transform(df[audio_features])
+        
+        # Combine features (weight audio more heavily)
+        feature_matrix = csr_matrix(np.hstack([
+            audio_matrix * 0.7,  # 70% weight to audio features
+            tfidf_matrix.toarray() * 0.3  # 30% weight to text
+        ]))
+        
+        print("Recommendation engine initialized successfully with sparse matrix")
     except Exception as e:
         print(f"Error initializing recommendation engine: {e}")
+        # Fallback to small random sample if initialization fails
+        df = df.sample(1000).reset_index(drop=True)
+        initialize_recommendation_engine()
 
-def get_recommendations_based_on_likes(liked_song_ids, n=5):
+def prepare_features(df):
+    """Prepare audio features for recommendation engine"""
+    # Select relevant audio features
+    audio_features = ['danceability', 'energy', 'loudness', 
+                    'speechiness', 'acousticness', 
+                    'instrumentalness', 'liveness', 
+                    'valence', 'tempo']
+    
+    # Normalize features
+    scaler = MinMaxScaler()
+    df[audio_features] = scaler.fit_transform(df[audio_features])
+    
+    # Combine with text features
+    tfidf = vectorizer.fit_transform(df['combined_features'])
+    audio_matrix = df[audio_features].values
+    
+    # Weight audio features more heavily than text
+    return np.hstack([audio_matrix * 0.7, tfidf.toarray() * 0.3])
+
+def get_recommendations_based_on_likes(liked_song_ids, n=10):
     try:
+        if not liked_song_ids or len(liked_song_ids) == 0:
+            return get_popular_fallback(n)
+            
+        # Get indices of liked songs
         liked_indices = df[df['id'].isin(liked_song_ids)].index
-        if len(liked_indices) == 0:
-            return df.sample(min(n, len(df))).to_dict('records')
         
-        # Get average similarity scores
-        avg_similarity = similarity_matrix[liked_indices].mean(axis=0)
+        # Use BallTree for efficient nearest neighbor search
+        tree = BallTree(feature_matrix, metric='euclidean')
         
-        # Get top similar songs not already liked
-        similar_indices = avg_similarity.argsort()[::-1]
-        recommended_indices = [i for i in similar_indices if i not in liked_indices][:n]
+        # Get average features of liked songs
+        avg_features = feature_matrix[liked_indices].mean(axis=0)
         
-        return df.iloc[recommended_indices].to_dict('records')
+        # Find similar songs (query 2x more than needed to filter out liked songs)
+        _, indices = tree.query(avg_features, k=min(n*2, len(df)))
+        
+        # Filter recommendations
+        recommendations = []
+        for idx in indices[0]:
+            song = df.iloc[idx].to_dict()
+            if song['id'] not in liked_song_ids and len(recommendations) < n:
+                recommendations.append(song)
+        
+        return recommendations if recommendations else get_popular_fallback(n)
+        
     except Exception as e:
-        print(f"Error generating recommendations: {e}")
-        return df.sample(min(n, len(df))).to_dict('records')
+        print(f"Recommendation error: {e}")
+        return get_popular_fallback(n)
+
+def get_popular_fallback(n):
+    """Fallback to popular songs when recommendations fail"""
+    return (df.sort_values('popularity', ascending=False)
+            .head(n)
+            .to_dict('records'))
+
+def get_hybrid_recommendations(query, n=10):
+    """Combine search and audio features for better results"""
+    try:
+        # Text-based search first
+        query_vec = vectorizer.transform([query])
+        text_scores = cosine_similarity(query_vec, tfidf_matrix).flatten()
+        
+        # Audio feature similarity
+        features = prepare_features(df)
+        knn = NearestNeighbors(n_neighbors=n*2, metric='cosine')
+        knn.fit(features)
+        _, audio_indices = knn.kneighbors(features.mean(axis=0).reshape(1, -1))
+        
+        # Combine results
+        combined_scores = []
+        for idx in range(len(df)):
+            score = text_scores[idx] * 0.4  # Weight text less
+            if idx in audio_indices:
+                audio_rank = np.where(audio_indices[0] == idx)[0]
+                if len(audio_rank) > 0:
+                    score += (1 - audio_rank[0]/len(audio_indices[0])) * 0.6
+            combined_scores.append(score)
+        
+        # Get top results
+        top_indices = np.argsort(combined_scores)[::-1][:n]
+        return df.iloc[top_indices].to_dict('records')
+    except Exception as e:
+        print(f"Hybrid recommendation error: {e}")
+        return get_popular_fallback(n)
 
 def get_spotify_token():
     auth_url = 'https://accounts.spotify.com/api/token'
@@ -113,7 +206,8 @@ def home():
     return render_template('index.html')
 
 # --- Recommendation API ---
-@app.route('/recommend', methods=['GET'])
+@app.route('/recommend')
+@cache.cached(timeout=300, query_string=True)
 def recommend():
     query = request.args.get('query', '').lower().strip()
     
@@ -121,26 +215,8 @@ def recommend():
         return jsonify({"error": "Empty query"}), 400
     
     try:
-        # First try exact matches
-        exact_matches = df[
-            (df['artist'].str.lower().str.contains(query, regex=False)) |
-            (df['genre'].str.lower().str.contains(query, regex=False)) |
-            (df['name'].str.lower().str.contains(query, regex=False))
-        ]
-        
-        # If not enough exact matches, use TF-IDF similarity
-        if len(exact_matches) < 5:
-            query_vec = vectorizer.transform([query])
-            similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
-            similar_indices = similarities.argsort()[::-1][:10]
-            similar_songs = df.iloc[similar_indices]
-            results = pd.concat([exact_matches, similar_songs]).drop_duplicates()
-        else:
-            results = exact_matches
-        
-        return jsonify(results.sort_values('popularity', ascending=False)
-                      .head(10)
-                      .to_dict('records'))
+        results = get_hybrid_recommendations(query)
+        return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -205,15 +281,7 @@ def swipe():
         
         # Check if we've completed all swipes
         if len(session.get('liked_songs', [])) + len(session.get('disliked_songs', [])) >= 10:
-            # Get recommendations based on liked songs
-            liked_songs = session.get('liked_songs', [])
-            
-            # If no songs were liked, return popular songs
-            if not liked_songs:
-                recommended = df.sort_values('popularity', ascending=False).head(5).to_dict('records')
-            else:
-                # Get recommendations based on liked songs
-                recommended = get_recommendations_based_on_likes(liked_songs)
+            recommendations = get_recommendations_based_on_likes(session['liked_songs'])
             
             # Clear session data
             session.pop('swipe_pool', None)
@@ -221,7 +289,7 @@ def swipe():
             session.pop('disliked_songs', None)
             
             return jsonify({
-                "recommendations": recommended,
+                "recommendations": recommendations,
                 "message": "Based on your preferences"
             })
             

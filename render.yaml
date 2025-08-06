@@ -16,3 +16,5 @@ services:
         value: https://music-recommender-mll6.onrender.com/callback
       - key: SECRET_KEY
         value: a_random_secret_string_for_flask
+      - key: REDIS_URL
+        value: redis://red-cn5v3pn109ks73bk9qrg:6379
