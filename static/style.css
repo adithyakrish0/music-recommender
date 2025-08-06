@@ -35,6 +35,9 @@ body {
   overflow: hidden;
   transition: all 0.3s ease;
   height: 100%;
+  transform: translateZ(0); /* Force hardware acceleration */
+  backface-visibility: hidden;
+  will-change: transform, opacity; /* Optimize for these properties */
 }
 
 .card:hover {
@@ -126,4 +129,10 @@ audio::-webkit-media-controls-play-button {
     padding: 0 10px;
     position: relative;
     z-index: 1;
+}
+
+.card-image {
+  /* ...existing card-image styles... */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }

@@ -312,6 +312,7 @@
         let activeCard = null;
         let startX, startY, moveX, moveY;
         let isDragging = false;
+        let dragStartTime = 0; // Add this global variable
         const cardStack = document.getElementById('card-stack');
         const resultsContainer = document.getElementById('recommendations');
         const swipeContainer = document.querySelector('.swiper-container');
@@ -412,111 +413,123 @@
 
         function startDrag(e) {
             if (!activeCard || isDragging) return;
-            
+
             isDragging = true;
-            
+            dragStartTime = Date.now(); // Record start time
+
             // Prevent scrolling on touch devices
             if (e.type === 'touchstart') {
                 e.preventDefault();
             }
-            
+
             // Get initial position
             const clientX = e.clientX || e.touches[0].clientX;
             const clientY = e.clientY || e.touches[0].clientY;
-            
+
             startX = clientX;
             startY = clientY;
-            
+
             // Add move and end listeners
             document.addEventListener('mousemove', dragCard);
             document.addEventListener('touchmove', dragCard, { passive: false });
             document.addEventListener('mouseup', endDrag);
             document.addEventListener('touchend', endDrag);
-            
+
             // Reset transition for smooth dragging
             activeCard.style.transition = 'none';
         }
 
         function dragCard(e) {
             if (!activeCard || !isDragging) return;
-            
-            // Prevent scrolling on touch devices
-            if (e.type === 'touchmove') {
-                e.preventDefault();
-            }
-            
-            const clientX = e.clientX || e.touches[0].clientX;
-            const clientY = e.clientY || e.touches[0].clientY;
-            
-            moveX = clientX - startX;
-            moveY = clientY - startY;
-            
-            // Calculate rotation based on horizontal movement (max 25deg)
-            const rotate = moveX * 0.1;
-            
-            // Apply transform
-            activeCard.style.transform = `translateX(${moveX}px) translateY(${moveY}px) rotate(${rotate}deg)`;
-            
-            // Show like/dislike indicator based on direction
-            if (moveX > 50) {
-                likeIndicator.classList.add('active-indicator');
-                dislikeIndicator.classList.remove('active-indicator');
-                activeCard.classList.add('like');
-                activeCard.classList.remove('dislike');
-            } else if (moveX < -50) {
-                dislikeIndicator.classList.add('active-indicator');
-                likeIndicator.classList.remove('active-indicator');
-                activeCard.classList.add('dislike');
-                activeCard.classList.remove('like');
-            } else {
-                likeIndicator.classList.remove('active-indicator');
-                dislikeIndicator.classList.remove('active-indicator');
-                activeCard.classList.remove('like', 'dislike');
-            }
+
+            // Use requestAnimationFrame for smoother updates
+            requestAnimationFrame(() => {
+                const clientX = e.clientX || e.touches[0].clientX;
+                const clientY = e.clientY || e.touches[0].clientY;
+
+                moveX = clientX - startX;
+                moveY = clientY - startY;
+
+                // Smoother rotation curve
+                const rotate = Math.min(Math.max(moveX * 0.15, -25), 25);
+
+                // Apply transform with optimized properties
+                activeCard.style.transform = `
+                    translateX(${moveX}px) 
+                    translateY(${moveY}px) 
+                    rotate(${rotate}deg)
+                    translateZ(0)
+                `;
+
+                // Indicator logic remains the same
+                if (moveX > 50) {
+                    likeIndicator.classList.add('active-indicator');
+                    dislikeIndicator.classList.remove('active-indicator');
+                    activeCard.classList.add('like');
+                    activeCard.classList.remove('dislike');
+                } else if (moveX < -50) {
+                    dislikeIndicator.classList.add('active-indicator');
+                    likeIndicator.classList.remove('active-indicator');
+                    activeCard.classList.add('dislike');
+                    activeCard.classList.remove('like');
+                } else {
+                    likeIndicator.classList.remove('active-indicator');
+                    dislikeIndicator.classList.remove('active-indicator');
+                    activeCard.classList.remove('like', 'dislike');
+                }
+            });
         }
 
         function endDrag() {
             if (!activeCard || !isDragging) return;
-            
+
             isDragging = false;
-            
+
             // Remove event listeners
             document.removeEventListener('mousemove', dragCard);
             document.removeEventListener('touchmove', dragCard);
             document.removeEventListener('mouseup', endDrag);
             document.removeEventListener('touchend', endDrag);
-            
+
             // Reset indicators
             likeIndicator.classList.remove('active-indicator');
             dislikeIndicator.classList.remove('active-indicator');
-            
-            // Check if card was dragged far enough to count as a swipe
+
             const threshold = 100;
-            
-            if (Math.abs(moveX) > threshold) {
-                // Swipe confirmed - animate off screen
-                activeCard.style.transition = 'transform 0.5s ease, opacity 0.3s';
-                
+            const velocity = Math.abs(moveX) / (Date.now() - dragStartTime); // Calculate swipe velocity
+
+            // Swipe confirmed
+            if (Math.abs(moveX) > threshold || (Math.abs(moveX) > 50 && velocity > 0.5)) {
+                activeCard.style.transition = `
+                    transform ${velocity > 1 ? 0.3 : 0.5}s cubic-bezier(0.2, 0.8, 0.4, 1),
+                    opacity 0.3s ease
+                `;
+
                 if (moveX > 0) {
-                    // Like swipe
-                    activeCard.style.transform = `translateX(500px) rotate(25deg)`;
+                    activeCard.style.transform = `
+                        translateX(${window.innerWidth}px) 
+                        rotate(${25 * Math.min(1, moveX/200)}deg)
+                        translateZ(0)
+                    `;
                     registerSwipe('like');
                 } else {
-                    // Dislike swipe
-                    activeCard.style.transform = `translateX(-500px) rotate(-25deg)`;
+                    activeCard.style.transform = `
+                        translateX(-${window.innerWidth}px) 
+                        rotate(${-25 * Math.min(1, Math.abs(moveX)/200)}deg)
+                        translateZ(0)
+                    `;
                     registerSwipe('dislike');
                 }
-                
+
                 activeCard.style.opacity = '0';
-                
-                // Move to next card
+
                 setTimeout(() => {
                     nextCard();
                 }, 300);
             } else {
-                // Return to center
-                activeCard.style.transition = 'transform 0.5s cubic-bezier(.25,.72,.51,1.09)';
-                activeCard.style.transform = 'translateX(0) translateY(0) rotate(0)';
+                // Return to center with spring-like animation
+                activeCard.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.4)';
+                activeCard.style.transform = 'translateX(0) translateY(0) rotate(0) translateZ(0)';
                 activeCard.classList.remove('like', 'dislike');
             }
         }
@@ -555,24 +568,25 @@
         }
 
         function updateCardStack() {
-            // Bring next card to front
             if (cards.length > 0) {
                 activeCard = cards[0];
-                
-                // Animate next card to center position
-                setTimeout(() => {
+
+                // Use requestAnimationFrame for smoother updates
+                requestAnimationFrame(() => {
                     if (activeCard) {
-                        activeCard.style.transition = 'transform 0.5s cubic-bezier(.25,.72,.51,1.09), opacity 0.3s';
-                        activeCard.style.transform = 'translateY(0) scale(1)';
+                        activeCard.style.transition = `
+                            transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.1),
+                            opacity 0.3s ease
+                        `;
+                        activeCard.style.transform = 'translateY(0) scale(1) translateZ(0)';
                         activeCard.style.opacity = '1';
-                        
-                        // Move other cards back slightly
+
                         if (cards.length > 1) {
-                            cards[1].style.transition = 'transform 0.5s cubic-bezier(.25,.72,.51,1.09)';
-                            cards[1].style.transform = 'translateY(15px) scale(0.95)';
+                            cards[1].style.transition = 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.1)';
+                            cards[1].style.transform = 'translateY(15px) scale(0.95) translateZ(0)';
                         }
                     }
-                }, 10);
+                });
             }
         }
 
