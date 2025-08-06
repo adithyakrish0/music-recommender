@@ -1,4 +1,5 @@
-Flask
-pandas
+flask
 spotipy
+pandas
 python-dotenv
+gunicorn

@@ -1,63 +1,666 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Music Recommendation</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MusicMatch | Discover Your Sound</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8e44ad;
+            --secondary: #3498db;
+            --accent: #1db954;
+            --dark: #121212;
+            --darker: #0a0a0a;
+            --light: #f5f5f5;
+            --gray: #b3b3b3;
+            --card-bg: #181818;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--darker), var(--dark));
+            color: var(--light);
+            min-height: 100vh;
+            background-attachment: fixed;
+            overflow-x: hidden;
+        }
+
+        header {
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 1rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: var(--accent);
+        }
+
+        .logo i {
+            color: var(--primary);
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        nav a {
+            color: var(--light);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1.1rem;
+            transition: var(--transition);
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+        }
+
+        nav a:hover {
+            color: var(--accent);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.7rem 1.8rem;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--light);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-spotify {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 7px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .hero {
+            padding: 6rem 5% 4rem;
+            text-align: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.3rem;
+            color: var(--gray);
+            margin-bottom: 2.5rem;
+            line-height: 1.6;
+        }
+
+        .search-container {
+            background: rgba(24, 24, 24, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            max-width: 800px;
+            margin: 0 auto 5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .search-title {
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 1.8rem;
+            color: var(--light);
+        }
+
+        .search-title i {
+            color: var(--accent);
+            margin-right: 10px;
+        }
+
+        .search-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 1rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .input-group label {
+            font-weight: 500;
+            color: var(--gray);
+        }
+
+        .search-input {
+            padding: 0.9rem 1.5rem;
+            border-radius: 12px;
+            border: none;
+            background: rgba(50, 50, 50, 0.5);
+            color: var(--light);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .search-input:focus {
+            outline: none;
+            background: rgba(70, 70, 70, 0.7);
+            box-shadow: 0 0 0 3px rgba(142, 68, 173, 0.3);
+        }
+
+        .search-btn {
+            align-self: flex-end;
+            padding: 0.9rem;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .results-section {
+            padding: 0 5% 5rem;
+        }
+
+        .section-title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2.2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .section-title::after {
+            content: "";
+            flex: 1;
+            height: 2px;
+            background: linear-gradient(to right, var(--primary), transparent);
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .song-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            overflow: hidden;
+            transition: var(--transition);
+            position: relative;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .song-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-image {
+            height: 200px;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-image::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('https://images.unsplash.com/photo-1470225620780-dba8ba36b745?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80') center/cover;
+            opacity: 0.7;
+        }
+
+        .card-image i {
+            font-size: 5rem;
+            color: rgba(255, 255, 255, 0.9);
+            z-index: 1;
+        }
+
+        .card-content {
+            padding: 1.5rem;
+        }
+
+        .song-title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.4rem;
+            margin-bottom: 0.5rem;
+            color: var(--light);
+        }
+
+        .song-artist {
+            color: var(--gray);
+            margin-bottom: 0.8rem;
+            font-size: 1.1rem;
+        }
+
+        .song-meta {
+            display: flex;
+            justify-content: space-between;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .popularity {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--accent);
+        }
+
+        .no-results {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 3rem;
+            background: var(--card-bg);
+            border-radius: 15px;
+        }
+
+        .no-results i {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            color: var(--gray);
+        }
+
+        .no-results h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            color: var(--light);
+        }
+
+        .no-results p {
+            color: var(--gray);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .spotify-section {
+            background: linear-gradient(135deg, rgba(29, 185, 84, 0.1), rgba(25, 20, 20, 0.3));
+            border-radius: 20px;
+            padding: 3rem;
+            margin: 5rem auto;
+            max-width: 1000px;
+            display: flex;
+            align-items: center;
+            gap: 3rem;
+            backdrop-filter: blur(5px);
+        }
+
+        .spotify-content {
+            flex: 1;
+        }
+
+        .spotify-image {
+            flex: 1;
+            text-align: center;
+        }
+
+        .spotify-image i {
+            font-size: 10rem;
+            color: var(--accent);
+            opacity: 0.8;
+        }
+
+        footer {
+            background: var(--darker);
+            padding: 3rem 5%;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .footer-logo {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            color: var(--accent);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--gray);
+            text-decoration: none;
+            transition: var(--transition);
+        }
+
+        .footer-links a:hover {
+            color: var(--accent);
+        }
+
+        .copyright {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        /* Loading animation */
+        .loader {
+            display: none;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top: 5px solid var(--accent);
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive design */
+        @media (max-width: 900px) {
+            .hero h1 {
+                font-size: 2.8rem;
+            }
+            
+            .search-form {
+                grid-template-columns: 1fr;
+            }
+            
+            .spotify-section {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                gap: 1.5rem;
+                padding: 1rem;
+            }
+            
+            nav ul {
+                gap: 1rem;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .hero {
+                padding: 4rem 5% 3rem;
+            }
+            
+            .hero h1 {
+                font-size: 2.3rem;
+            }
+            
+            .hero p {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
 </head>
 <body>
+    <!-- Header with Navigation -->
+    <header>
+        <div class="logo">
+            <i class="fas fa-music"></i>
+            <span>MusicMatch</span>
+        </div>
+        
+        <nav>
+            <ul>
+                <li><a href="#" class="active">Home</a></li>
+                <li><a href="#">Discover</a></li>
+                <li><a href="#">Genres</a></li>
+                <li><a href="#">Top Charts</a></li>
+                <li><a href="#">About</a></li>
+            </ul>
+        </nav>
+        
+        <div class="auth-buttons">
+            <button class="btn btn-primary" id="spotify-login">
+                <i class="fab fa-spotify"></i> Connect Spotify
+            </button>
+            <button class="btn btn-secondary">
+                <i class="fas fa-user"></i> Sign Up
+            </button>
+        </div>
+    </header>
 
-  <div class="main-container">
-    <h2>🎵 Music Recommendation System</h2>
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Discover Music That Moves You</h1>
+        <p>Find your perfect sound with our intelligent recommendation engine powered by Spotify's massive music database and advanced algorithms.</p>
+        
+        <div class="search-container">
+            <h2 class="search-title"><i class="fas fa-search"></i> Find Your Next Favorite Song</h2>
+            <form class="search-form" id="search-form">
+                <div class="input-group">
+                    <label for="artist">Artist</label>
+                    <input type="text" id="artist" class="search-input" placeholder="E.g. The Weeknd, Taylor Swift...">
+                </div>
+                
+                <div class="input-group">
+                    <label for="genre">Genre</label>
+                    <input type="text" id="genre" class="search-input" placeholder="E.g. Pop, Rock, Hip-hop...">
+                </div>
+                
+                <button type="submit" class="btn btn-primary search-btn">
+                    <i class="fas fa-search"></i> Search
+                </button>
+            </form>
+        </div>
+    </section>
 
-    <div class="form-section">
-      <input type="text" id="artist" placeholder="Enter Artist">
-      <input type="text" id="genre" placeholder="Enter Genre">
-      <button onclick="searchSongs()">Search</button>
-    </div>
+    <!-- Results Section -->
+    <section class="results-section">
+        <h2 class="section-title"><i class="fas fa-headphones"></i> Recommended For You</h2>
+        
+        <div class="loader" id="loader"></div>
+        
+        <div class="results-grid" id="results-container">
+            <!-- Results will be dynamically inserted here -->
+            <div class="no-results">
+                <i class="fas fa-music"></i>
+                <h3>Your Music Journey Starts Here</h3>
+                <p>Search for songs by artist or genre to discover your next favorite track.</p>
+            </div>
+        </div>
+    </section>
 
-    <h3>Recommended Songs:</h3>
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Song</th>
-            <th>Artist</th>
-            <th>Genre</th>
-            <th>Popularity</th>
-          </tr>
-        </thead>
-        <tbody id="results"></tbody>
-      </table>
-    </div>
-  </div>
+    <!-- Spotify Integration Section -->
+    <section class="spotify-section">
+        <div class="spotify-content">
+            <h2>Connect Your Spotify Account</h2>
+            <p>Unlock personalized recommendations based on your listening history and favorite tracks. Our integration with Spotify allows us to create custom playlists just for you.</p>
+            <button class="btn btn-spotify" id="spotify-integrate">
+                <i class="fab fa-spotify"></i> Connect with Spotify
+            </button>
+        </div>
+        <div class="spotify-image">
+            <i class="fab fa-spotify"></i>
+        </div>
+    </section>
 
-  <script>
-    function searchSongs() {
-      let artist = $("#artist").val();
-      let genre = $("#genre").val();
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo">MusicMatch</div>
+            <div class="footer-links">
+                <a href="#">Home</a>
+                <a href="#">About</a>
+                <a href="#">Features</a>
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+                <a href="#">Contact</a>
+            </div>
+            <p class="copyright">© 2023 MusicMatch. All rights reserved. This site uses Spotify API for music recommendations.</p>
+        </div>
+    </footer>
 
-      $.get("/search", { artist: artist, genre: genre }, function(data) {
-        let rows = "";
-        if (data.message) {
-          rows = `<tr><td colspan="4">${data.message}</td></tr>`;
-        } else {
-          data.forEach(song => {
-            rows += `<tr>
-                        <td>${song.name}</td>
-                        <td>${song.artist}</td>
-                        <td>${song.genre}</td>
-                        <td>${song.popularity || "N/A"}</td>
-                     </tr>`;
-          });
-        }
-        $("#results").html(rows);
-      });
-    }
-  </script>
-
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchForm = document.getElementById('search-form');
+            const resultsContainer = document.getElementById('results-container');
+            const loader = document.getElementById('loader');
+            
+            searchForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const artist = document.getElementById('artist').value.trim();
+                const genre = document.getElementById('genre').value.trim();
+                
+                // Show loader
+                loader.style.display = 'block';
+                resultsContainer.innerHTML = '';
+                
+                // Simulate API call - In your implementation, you would call your Flask endpoint
+                setTimeout(() => {
+                    // This is a simulation - replace with actual fetch to your /search endpoint
+                    simulateSearchResults(artist, genre);
+                    loader.style.display = 'none';
+                }, 1500);
+            });
+            
+            function simulateSearchResults(artist, genre) {
+                // In a real implementation, you would fetch from your Flask endpoint:
+                // fetch(`/search?artist=${encodeURIComponent(artist)}&genre=${encodeURIComponent(genre)}`)
+                //   .then(response => response.json())
+                //   .then(data => displayResults(data));
+                
+                // For demo purposes, we'll simulate some results
+                const mockResults = [
+                    {name: "Blinding Lights", artist: "The Weeknd", genre: "Pop", popularity: 95},
+                    {name: "Save Your Tears", artist: "The Weeknd", genre: "Pop", popularity: 92},
+                    {name: "Starboy", artist: "The Weeknd, Daft Punk", genre: "Electronic", popularity: 90},
+                    {name: "Die For You", artist: "The Weeknd", genre: "R&B", popularity: 88},
+                    {name: "Take My Breath", artist: "The Weeknd", genre: "Synth-pop", popularity: 85},
+                    {name: "Heartless", artist: "The Weeknd", genre: "R&B", popularity: 82},
+                    {name: "In Your Eyes", artist: "The Weeknd", genre: "Synth-pop", popularity: 80},
+                    {name: "After Hours", artist: "The Weeknd", genre: "Alternative R&B", popularity: 78}
+                ];
+                
+                // Filter based on search terms for simulation
+                const filteredResults = mockResults.filter(song => {
+                    const artistMatch = artist ? song.artist.toLowerCase().includes(artist.toLowerCase()) : true;
+                    const genreMatch = genre ? song.genre.toLowerCase().includes(genre.toLowerCase()) : true;
+                    return artistMatch && genreMatch;
+                });
+                
+                displayResults(filteredResults);
+            }
+            
+            function displayResults(results) {
+                resultsContainer.innerHTML = '';
+                
+                if (results.length === 0) {
+                    resultsContainer.innerHTML = `
+                        <div class="no-results">
+                            <i class="fas fa-search"></i>
+                            <h3>No Matching Songs Found</h3>
+                            <p>Try adjusting your search terms or explore different genres.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                results.forEach(song => {
+                    const card = document.createElement('div');
+                    card.className = 'song-card';
+                    card.innerHTML = `
+                        <div class="card-image">
+                            <i class="fas fa-music"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3 class="song-title">${song.name}</h3>
+                            <p class="song-artist">${song.artist}</p>
+                            <div class="song-meta">
+                                <span class="song-genre">${song.genre}</span>
+                                <span class="popularity">
+                                    <i class="fas fa-fire"></i>
+                                    ${song.popularity}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                    resultsContainer.appendChild(card);
+                });
+            }
+            
+            // Spotify login buttons
+            document.getElementById('spotify-login').addEventListener('click', function() {
+                alert('Redirecting to Spotify authentication...');
+                // In your implementation: window.location.href = '/spotify_login';
+            });
+            
+            document.getElementById('spotify-integrate').addEventListener('click', function() {
+                alert('Redirecting to Spotify authentication...');
+                // In your implementation: window.location.href = '/spotify_login';
+            });
+        });
+    </script>
 </body>
 </html>
-

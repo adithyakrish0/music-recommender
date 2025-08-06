@@ -12,10 +12,10 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
 
-# Spotify configuration
+# Spotify configuration - Updated to handle both environments
 SPOTIPY_CLIENT_ID = os.environ['SPOTIPY_CLIENT_ID']
 SPOTIPY_CLIENT_SECRET = os.environ['SPOTIPY_CLIENT_SECRET']
-SPOTIPY_REDIRECT_URI = os.environ['SPOTIPY_REDIRECT_URI']
+SPOTIPY_REDIRECT_URI = os.environ.get('SPOTIPY_REDIRECT_URI', 'http://localhost:5000/callback')
 SCOPE = "user-library-read user-top-read"
 
 # --- Load the Spotify CSV Data ---
@@ -35,7 +35,8 @@ def create_spotify_oauth():
         client_id=SPOTIPY_CLIENT_ID,
         client_secret=SPOTIPY_CLIENT_SECRET,
         redirect_uri=SPOTIPY_REDIRECT_URI,
-        scope=SCOPE
+        scope=SCOPE,
+        show_dialog=True  # Added to make auth flow clearer
     )
 
 # --- Home/Login Route ---
@@ -67,17 +68,27 @@ def login():
 # --- Spotify OAuth Login ---
 @app.route('/spotify_login')
 def spotify_login():
-    sp_oauth = create_spotify_oauth()
-    auth_url = sp_oauth.get_authorize_url()
-    return redirect(auth_url)
+    try:
+        sp_oauth = create_spotify_oauth()
+        auth_url = sp_oauth.get_authorize_url()
+        print(f"Redirecting to Spotify auth URL: {auth_url}")  # Debug log
+        return redirect(auth_url)
+    except Exception as e:
+        print(f"Error in spotify_login: {e}")
+        return redirect(url_for('home'))
 
 # --- Spotify OAuth Callback ---
 @app.route('/callback')
 def callback():
-    sp_oauth = create_spotify_oauth()
-    token_info = sp_oauth.get_access_token(request.args['code'])
-    session['spotify_token'] = token_info
-    return redirect(url_for('dashboard'))
+    try:
+        sp_oauth = create_spotify_oauth()
+        print(f"Callback received. Redirect URI: {SPOTIPY_REDIRECT_URI}")  # Debug log
+        token_info = sp_oauth.get_access_token(request.args['code'])
+        session['spotify_token'] = token_info
+        return redirect(url_for('dashboard'))
+    except Exception as e:
+        print(f"Error in callback: {e}")
+        return redirect(url_for('home'))
 
 # --- Dashboard for Spotify Users ---
 @app.route('/dashboard')
@@ -129,5 +140,9 @@ def logout():
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
+    # Print debug info about Spotify config
+    print(f"Spotify Client ID: {SPOTIPY_CLIENT_ID}")
+    print(f"Spotify Redirect URI: {SPOTIPY_REDIRECT_URI}")
+    
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)
