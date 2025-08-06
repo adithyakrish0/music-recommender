@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harmonic | Swipe to Discover</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Poppins:wght@200;300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8e44ad;
+            --secondary: #3498db;
+            --accent: #1db954;
+            --dark: #121212;
+            --darker: #0a0a0a;
+            --light: #f5f5f5;
+            --gray: #b3b3b3;
+            --glass: rgba(255, 255, 255, 0.05);
+            --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            --like: rgba(29, 185, 84, 0.2);
+            --dislike: rgba(255, 71, 87, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: var(--light);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+            touch-action: pan-y;
+        }
+
+        .swiper-container {
+            width: 100%;
+            max-width: 400px;
+            height: 85vh;
+            position: relative;
+            perspective: 1000px;
+            user-select: none;
+        }
+
+        .card-stack {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .card {
+            width: 100%;
+            height: 75vh;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 25px;
+            padding: 2rem;
+            color: white;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            position: relative; /* Add this if not present */
+            top: 0;
+            left: 0;
+            transform-style: preserve-3d;
+            transition: transform 0.6s ease, opacity 0.4s;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            overflow: hidden;   /* Add this if not present */
+            cursor: grab;
+            touch-action: none;
+            will-change: transform;
+        }
+
+        .card:active {
+            cursor: grabbing;
+        }
+
+        .card.like {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+        }
+
+        .card.dislike {
+            background: linear-gradient(135deg, var(--primary), #ff4757);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.7) 100%);
+            z-index: 1;
+        }
+
+        .card-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            z-index: 0;
+            filter: brightness(0.7);
+            transition: var(--transition);
+        }
+
+        .card-content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+            padding: 2rem;
+            pointer-events: none;
+        }
+
+        .card h2 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        .card p {
+            font-size: 1.2rem;
+            margin-bottom: 0.3rem;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.3);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 5px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+
+        .swipe-count {
+            text-align: center;
+            margin-bottom: 1rem;
+            color: var(--gray);
+        }
+
+        .recommendations-container {
+            display: none;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .recommendations-container h2 {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--light);
+        }
+
+        .recommendation-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .recommendation-item {
+            background: var(--glass);
+            padding: 1rem;
+            border-radius: 10px;
+            transition: var(--transition);
+        }
+
+        .recommendation-item:hover {
+            transform: translateY(-3px);
+            background: rgba(255,255,255,0.1);
+        }
+
+        .back-btn {
+            display: inline-block;
+            margin-top: 2rem;
+            padding: 0.8rem 1.8rem;
+            background: var(--primary);
+            color: white;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .back-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(142, 68, 173, 0.3);
+        }
+
+        .error-message {
+            color: #ff4757;
+            padding: 1rem;
+            background: rgba(255, 71, 87, 0.1);
+            border-radius: 10px;
+            margin: 1rem 0;
+        }
+
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--accent);
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+
+        .choice-indicator {
+            position: absolute;
+            top: 30px;
+            width: 100%;
+            text-align: center;
+            font-size: 2rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .like-indicator {
+            right: 20px;
+            color: var(--accent);
+        }
+
+        .dislike-indicator {
+            left: 20px;
+            color: #ff4757;
+        }
+
+        .active-indicator {
+            opacity: 1;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s forwards;
+        }
+
+        .pulse {
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .swiper-container {
+                height: 90vh;
+            }
+            .card {
+                height: 80vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="swiper-container">
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+        
+        <div class="swipe-count" id="swipe-count">0/10</div>
+        
+        <div class="choice-indicator like-indicator">LIKE</div>
+        <div class="choice-indicator dislike-indicator">NOPE</div>
+        
+        <div class="card-stack" id="card-stack">
+            <!-- Cards will be dynamically added here -->
+        </div>
+    </div>
+    
+    <div class="recommendations-container" id="recommendations">
+        <h2>Your Custom Playlist</h2>
+        <div class="recommendation-list" id="recommendation-list"></div>
+        <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Search</a>
+    </div>
+
+    <script>
+        let currentSongIndex = 0;
+        let songs = [];
+        let cards = [];
+        let activeCard = null;
+        let startX, startY, moveX, moveY;
+        let isDragging = false;
+        const cardStack = document.getElementById('card-stack');
+        const resultsContainer = document.getElementById('recommendations');
+        const swipeContainer = document.querySelector('.swiper-container');
+        const likeIndicator = document.querySelector('.like-indicator');
+        const dislikeIndicator = document.querySelector('.dislike-indicator');
+
+        // Improved song loading with error handling
+        function loadSongs() {
+            document.getElementById('swipe-count').textContent = "Loading...";
+            document.getElementById('progress').style.width = "0%";
+            
+            fetch('/api/swiper')
+                .then(res => {
+                    if (!res.ok) throw new Error('Network response was not ok');
+                    return res.json();
+                })
+                .then(data => {
+                    console.log("Received data:", data);
+                    if (!data || data.length === 0) {
+                        throw new Error('No songs available');
+                    }
+                    
+                    songs = Array.isArray(data) ? data : [];
+                    if (songs.length === 0) {
+                        throw new Error('Received empty song list');
+                    }
+                    
+                    initializeCards();
+                })
+                .catch(error => {
+                    console.error("Fetch error:", error);
+                    
+                    // Create fallback songs
+                    songs = [];
+                    for (let i = 0; i < 10; i++) {
+                        songs.push({
+                            id: i+1,
+                            name: `Sample Song ${i+1}`,
+                            artist: "Sample Artist",
+                            genre: "Pop"
+                        });
+                    }
+                    
+                    initializeCards();
+                    showError("Using sample songs - "+error.message);
+                });
+        }
+
+        function initializeCards() {
+            cardStack.innerHTML = '';
+            cards = [];
+            
+            // Create 3 cards initially (current and next two)
+            for (let i = 0; i < Math.min(3, songs.length); i++) {
+                createCard(i);
+            }
+            
+            activeCard = cards[0];
+            updateProgress();
+        }
+
+        function createCard(index) {
+            const song = songs[index];
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.index = index;
+            
+            // Use the image URL from the song data or fallback placeholder
+            const imageUrl = song.image_url || 'https://via.placeholder.com/300x300/8e44ad/ffffff?text=No+Image';
+            
+            card.innerHTML = `
+                <div class="card-image" style="background-image: url('${imageUrl}')"></div>
+                <div class="card-content">
+                    <h2>${song.name || "Unknown Song"}</h2>
+                    <p>${song.artist || "Unknown Artist"}</p>
+                    <p>${song.genre || "Unknown Genre"}</p>
+                </div>
+            `;
+            
+            // Set z-index so newest cards are behind (higher numbers are on top)
+            card.style.zIndex = (100 - index);
+            
+            // Add event listeners for drag/swipe
+            card.addEventListener('mousedown', startDrag);
+            card.addEventListener('touchstart', startDrag, { passive: false });
+            
+            cardStack.appendChild(card);
+            cards.push(card);
+            
+            // If this isn't the first card, position it slightly behind and below
+            if (index > 0) {
+                card.style.transform = 'translateY(15px) scale(0.95)';
+                card.style.opacity = '0.9';
+            }
+            
+            return card;
+        }
+
+        function startDrag(e) {
+            if (!activeCard || isDragging) return;
+            
+            isDragging = true;
+            
+            // Prevent scrolling on touch devices
+            if (e.type === 'touchstart') {
+                e.preventDefault();
+            }
+            
+            // Get initial position
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            
+            startX = clientX;
+            startY = clientY;
+            
+            // Add move and end listeners
+            document.addEventListener('mousemove', dragCard);
+            document.addEventListener('touchmove', dragCard, { passive: false });
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+            
+            // Reset transition for smooth dragging
+            activeCard.style.transition = 'none';
+        }
+
+        function dragCard(e) {
+            if (!activeCard || !isDragging) return;
+            
+            // Prevent scrolling on touch devices
+            if (e.type === 'touchmove') {
+                e.preventDefault();
+            }
+            
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            
+            moveX = clientX - startX;
+            moveY = clientY - startY;
+            
+            // Calculate rotation based on horizontal movement (max 25deg)
+            const rotate = moveX * 0.1;
+            
+            // Apply transform
+            activeCard.style.transform = `translateX(${moveX}px) translateY(${moveY}px) rotate(${rotate}deg)`;
+            
+            // Show like/dislike indicator based on direction
+            if (moveX > 50) {
+                likeIndicator.classList.add('active-indicator');
+                dislikeIndicator.classList.remove('active-indicator');
+                activeCard.classList.add('like');
+                activeCard.classList.remove('dislike');
+            } else if (moveX < -50) {
+                dislikeIndicator.classList.add('active-indicator');
+                likeIndicator.classList.remove('active-indicator');
+                activeCard.classList.add('dislike');
+                activeCard.classList.remove('like');
+            } else {
+                likeIndicator.classList.remove('active-indicator');
+                dislikeIndicator.classList.remove('active-indicator');
+                activeCard.classList.remove('like', 'dislike');
+            }
+        }
+
+        function endDrag() {
+            if (!activeCard || !isDragging) return;
+            
+            isDragging = false;
+            
+            // Remove event listeners
+            document.removeEventListener('mousemove', dragCard);
+            document.removeEventListener('touchmove', dragCard);
+            document.removeEventListener('mouseup', endDrag);
+            document.removeEventListener('touchend', endDrag);
+            
+            // Reset indicators
+            likeIndicator.classList.remove('active-indicator');
+            dislikeIndicator.classList.remove('active-indicator');
+            
+            // Check if card was dragged far enough to count as a swipe
+            const threshold = 100;
+            
+            if (Math.abs(moveX) > threshold) {
+                // Swipe confirmed - animate off screen
+                activeCard.style.transition = 'transform 0.5s ease, opacity 0.3s';
+                
+                if (moveX > 0) {
+                    // Like swipe
+                    activeCard.style.transform = `translateX(500px) rotate(25deg)`;
+                    registerSwipe('like');
+                } else {
+                    // Dislike swipe
+                    activeCard.style.transform = `translateX(-500px) rotate(-25deg)`;
+                    registerSwipe('dislike');
+                }
+                
+                activeCard.style.opacity = '0';
+                
+                // Move to next card
+                setTimeout(() => {
+                    nextCard();
+                }, 300);
+            } else {
+                // Return to center
+                activeCard.style.transition = 'transform 0.5s cubic-bezier(.25,.72,.51,1.09)';
+                activeCard.style.transform = 'translateX(0) translateY(0) rotate(0)';
+                activeCard.classList.remove('like', 'dislike');
+            }
+        }
+
+        function registerSwipe(direction) {
+            const currentIndex = parseInt(activeCard.dataset.index);
+            const song = songs[currentIndex];
+            
+            if (direction === 'like') {
+                sendSwipe(song.id);
+            }
+            
+            currentSongIndex++;
+            updateProgress();
+        }
+
+        function nextCard() {
+            // Remove the swiped card
+            if (activeCard && activeCard.parentNode) {
+                cardStack.removeChild(activeCard);
+            }
+            cards.shift();
+            
+            // Create a new card if we have more songs
+            if (currentSongIndex + 2 < songs.length) {
+                createCard(currentSongIndex + 2);
+            }
+            
+            // Update the stack
+            updateCardStack();
+            
+            // Check if we're done
+            if (currentSongIndex >= songs.length) {
+                showRecommendations();
+            }
+        }
+
+        function updateCardStack() {
+            // Bring next card to front
+            if (cards.length > 0) {
+                activeCard = cards[0];
+                
+                // Animate next card to center position
+                setTimeout(() => {
+                    if (activeCard) {
+                        activeCard.style.transition = 'transform 0.5s cubic-bezier(.25,.72,.51,1.09), opacity 0.3s';
+                        activeCard.style.transform = 'translateY(0) scale(1)';
+                        activeCard.style.opacity = '1';
+                        
+                        // Move other cards back slightly
+                        if (cards.length > 1) {
+                            cards[1].style.transition = 'transform 0.5s cubic-bezier(.25,.72,.51,1.09)';
+                            cards[1].style.transform = 'translateY(15px) scale(0.95)';
+                        }
+                    }
+                }, 10);
+            }
+        }
+
+        function updateProgress() {
+            document.getElementById('swipe-count').textContent = `${currentSongIndex}/${songs.length}`;
+            document.getElementById('progress').style.width = `${(currentSongIndex / songs.length) * 100}%`;
+        }
+
+        function sendSwipe(songId) {
+            fetch('/swipe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({song_id: songId})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error("Swipe error:", data.error);
+                }
+            })
+            .catch(error => {
+                console.error("Network error:", error);
+            });
+        }
+
+        function showRecommendations() {
+            swipeContainer.style.display = 'none';
+            resultsContainer.style.display = 'block';
+            document.getElementById('recommendation-list').innerHTML = '<div class="loader"></div>';
+            
+            fetch('/swipe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({song_id: -1}) // Dummy ID to trigger recommendations
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to get recommendations');
+                return response.json();
+            })
+            .then(data => {
+                const list = document.getElementById('recommendation-list');
+                list.innerHTML = '';
+                
+                const recommendations = data.recommendations || [];
+                
+                if (recommendations.length === 0) {
+                    // If no recommendations, show popular songs as fallback
+                    return fetch('/api/swiper')
+                        .then(res => res.json())
+                        .then(fallbackData => {
+                            const fallback = Array.isArray(fallbackData) ? 
+                                fallbackData.slice(0, 5) : 
+                                [];
+                            
+                            displayRecommendations(fallback);
+                        });
+                }
+                
+                displayRecommendations(recommendations);
+            })
+            .catch(error => {
+                console.error("Recommendation error:", error);
+                // Show fallback recommendations
+                const fallback = songs.slice(0, 5);
+                displayRecommendations(fallback, true);
+            });
+        }
+
+        function displayRecommendations(recommendations, isFallback = false) {
+            const list = document.getElementById('recommendation-list');
+            list.innerHTML = '';
+            
+            if (recommendations.length === 0) {
+                list.innerHTML = `
+                    <div class="error-message">
+                        No recommendations available
+                    </div>
+                    <a href="/swiper" class="back-btn" style="margin-top: 1rem;">
+                        <i class="fas fa-sync-alt"></i> Try Again
+                    </a>
+                `;
+                return;
+            }
+            
+            if (isFallback) {
+                const warning = document.createElement('div');
+                warning.className = 'error-message';
+                warning.textContent = 'Showing popular songs instead';
+                list.appendChild(warning);
+            }
+            
+            recommendations.forEach((song, index) => {
+                const item = document.createElement('div');
+                item.className = 'recommendation-item fade-in';
+                item.style.animationDelay = `${index * 0.1}s`;
+                item.innerHTML = `
+                    <h3>${song.name || "Unknown"}</h3>
+                    <p>${song.artist || "Unknown"} • ${song.genre || "Unknown"}</p>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            document.querySelector('.swiper-container').prepend(errorDiv);
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 3000);
+        }
+
+        // Load songs on initial page load
+        loadSongs();
+    </script>
+</body>
+</html>

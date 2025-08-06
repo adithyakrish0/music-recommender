@@ -1,148 +1,247 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, jsonify, session
 import pandas as pd
-import csv
-import os
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+import random
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from collections import defaultdict
+import requests
+from requests.auth import HTTPBasicAuth
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
+app.secret_key = "your_secret_key"  # Change this to a real secret key
 
-# Spotify configuration - Updated to handle both environments
-SPOTIPY_CLIENT_ID = os.environ['SPOTIPY_CLIENT_ID']
-SPOTIPY_CLIENT_SECRET = os.environ['SPOTIPY_CLIENT_SECRET']
-SPOTIPY_REDIRECT_URI = os.environ.get('SPOTIPY_REDIRECT_URI', 'http://localhost:5000/callback')
-SCOPE = "user-library-read user-top-read"
+# Spotify API credentials
+SPOTIFY_CLIENT_ID = '8a1446211a6648adb16de14a18991937'
+SPOTIFY_CLIENT_SECRET = '14a27936b1a548a79cef56500fcec1f3'
 
-# --- Load the Spotify CSV Data ---
+# Load music data with better error handling
 try:
     df = pd.read_csv("spotify.csv")
+    
+    # Standardize column names
     df.rename(columns={
         'track_name': 'name', 
         'artists': 'artist', 
         'track_genre': 'genre'
     }, inplace=True)
+    
+    # Clean data
+    df.dropna(subset=['name', 'artist', 'genre'], inplace=True)
+    df['artist'] = df['artist'].str.split(';').str[0]
+    df['artist'] = df['artist'].str.replace(r'[\[\]\'"]', '', regex=True)
+    
+    # Handle popularity
+    if 'popularity' not in df.columns:
+        df['popularity'] = 50
+    else:
+        df['popularity'] = df['popularity'].clip(0, 100)
+    
+    # Create features for recommendation
+    df['combined_features'] = (df['artist'] + ' ' + df['genre'] + ' ' + 
+                             df['name'] + ' ' + 
+                             df['danceability'].astype(str) + ' ' +
+                             df['energy'].astype(str))
+    
+    print(f"Loaded {len(df)} songs") 
 except Exception as e:
-    print(f"❌ Error loading Spotify CSV: {e}")
-    df = pd.DataFrame()  # Fallback empty DataFrame
+    print(f"Error loading data: {e}")
+    # Create fallback dataframe
+    df = pd.DataFrame([{
+        'id': i+1,
+        'name': f"Sample Song {i+1}", 
+        'artist': "Sample Artist", 
+        'genre': "Pop",
+        'popularity': 50
+    } for i in range(10)])
 
-def create_spotify_oauth():
-    return SpotifyOAuth(
-        client_id=SPOTIPY_CLIENT_ID,
-        client_secret=SPOTIPY_CLIENT_SECRET,
-        redirect_uri=SPOTIPY_REDIRECT_URI,
-        scope=SCOPE,
-        show_dialog=True  # Added to make auth flow clearer
+vectorizer = TfidfVectorizer(stop_words='english')
+tfidf_matrix = None
+similarity_matrix = None
+
+def initialize_recommendation_engine():
+    global tfidf_matrix, similarity_matrix
+    try:
+        tfidf_matrix = vectorizer.fit_transform(df['combined_features'])
+        similarity_matrix = cosine_similarity(tfidf_matrix)
+        print("Recommendation engine initialized successfully")
+    except Exception as e:
+        print(f"Error initializing recommendation engine: {e}")
+
+def get_recommendations_based_on_likes(liked_song_ids, n=5):
+    try:
+        liked_indices = df[df['id'].isin(liked_song_ids)].index
+        if len(liked_indices) == 0:
+            return df.sample(min(n, len(df))).to_dict('records')
+        
+        # Get average similarity scores
+        avg_similarity = similarity_matrix[liked_indices].mean(axis=0)
+        
+        # Get top similar songs not already liked
+        similar_indices = avg_similarity.argsort()[::-1]
+        recommended_indices = [i for i in similar_indices if i not in liked_indices][:n]
+        
+        return df.iloc[recommended_indices].to_dict('records')
+    except Exception as e:
+        print(f"Error generating recommendations: {e}")
+        return df.sample(min(n, len(df))).to_dict('records')
+
+def get_spotify_token():
+    auth_url = 'https://accounts.spotify.com/api/token'
+    auth_response = requests.post(
+        auth_url,
+        auth=HTTPBasicAuth(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET),
+        data={'grant_type': 'client_credentials'}
     )
+    return auth_response.json().get('access_token')
 
-# --- Home/Login Route ---
+def get_album_art(song_name, artist_name):
+    try:
+        token = get_spotify_token()
+        headers = {'Authorization': f'Bearer {token}'}
+        search_url = f'https://api.spotify.com/v1/search?q=track:{song_name} artist:{artist_name}&type=track&limit=1'
+        response = requests.get(search_url, headers=headers).json()
+        
+        if response.get('tracks', {}).get('items'):
+            return response['tracks']['items'][0]['album']['images'][0]['url']  # Largest image
+    except Exception as e:
+        print(f"Error fetching album art: {e}")
+    return None
+
+# --- Main Page ---
 @app.route('/')
 def home():
-    if 'spotify_token' in session:
-        return redirect(url_for('dashboard'))
-    return render_template('login.html')
-
-# --- Handle Form Login ---
-@app.route('/login', methods=['POST'])
-def login():
-    # Save user info to users.csv
-    name = request.form['name']
-    email = request.form['email']
-    phone = request.form['phone']
-
-    user_file = 'users.csv'
-    file_exists = os.path.isfile(user_file)
-
-    with open(user_file, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(['Name', 'Email', 'Phone'])  # Header
-        writer.writerow([name, email, phone])
-
-    return redirect('/main')
-
-# --- Spotify OAuth Login ---
-@app.route('/spotify_login')
-def spotify_login():
-    try:
-        sp_oauth = create_spotify_oauth()
-        auth_url = sp_oauth.get_authorize_url()
-        print(f"Redirecting to Spotify auth URL: {auth_url}")  # Debug log
-        return redirect(auth_url)
-    except Exception as e:
-        print(f"Error in spotify_login: {e}")
-        return redirect(url_for('home'))
-
-# --- Spotify OAuth Callback ---
-@app.route('/callback')
-def callback():
-    try:
-        sp_oauth = create_spotify_oauth()
-        print(f"Callback received. Redirect URI: {SPOTIPY_REDIRECT_URI}")  # Debug log
-        token_info = sp_oauth.get_access_token(request.args['code'])
-        session['spotify_token'] = token_info
-        return redirect(url_for('dashboard'))
-    except Exception as e:
-        print(f"Error in callback: {e}")
-        return redirect(url_for('home'))
-
-# --- Dashboard for Spotify Users ---
-@app.route('/dashboard')
-def dashboard():
-    if 'spotify_token' not in session:
-        return redirect(url_for('home'))
-    
-    try:
-        sp = spotipy.Spotify(auth=session['spotify_token']['access_token'])
-        user = sp.current_user()
-        top_tracks = sp.current_user_top_tracks(limit=10)
-        return render_template('dashboard.html', user=user, top_tracks=top_tracks)
-    except Exception as e:
-        print(f"Spotify API error: {e}")
-        session.pop('spotify_token', None)
-        return redirect(url_for('home'))
-
-# --- Main Page (Recommendation UI) ---
-@app.route('/main')
-def main():
     return render_template('index.html')
 
-# --- Song Search API ---
-@app.route('/search', methods=['GET'])
-def search_songs():
-    artist = request.args.get('artist', '').strip().lower()
-    genre = request.args.get('genre', '').strip().lower()
+# --- Recommendation API ---
+@app.route('/recommend', methods=['GET'])
+def recommend():
+    query = request.args.get('query', '').lower().strip()
+    
+    if not query:
+        return jsonify({"error": "Empty query"}), 400
+    
+    try:
+        # First try exact matches
+        exact_matches = df[
+            (df['artist'].str.lower().str.contains(query, regex=False)) |
+            (df['genre'].str.lower().str.contains(query, regex=False)) |
+            (df['name'].str.lower().str.contains(query, regex=False))
+        ]
+        
+        # If not enough exact matches, use TF-IDF similarity
+        if len(exact_matches) < 5:
+            query_vec = vectorizer.transform([query])
+            similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
+            similar_indices = similarities.argsort()[::-1][:10]
+            similar_songs = df.iloc[similar_indices]
+            results = pd.concat([exact_matches, similar_songs]).drop_duplicates()
+        else:
+            results = exact_matches
+        
+        return jsonify(results.sort_values('popularity', ascending=False)
+                      .head(10)
+                      .to_dict('records'))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    filtered_df = df.copy()
+# --- Swiper Interface ---
+@app.route('/swiper')
+def swiper_view():
+    """Render the swiper interface template"""
+    return render_template('swiper.html')
 
-    if artist:
-        filtered_df = filtered_df[filtered_df['artist'].str.lower().str.contains(artist, na=False)]
-    if genre:
-        filtered_df = filtered_df[filtered_df['genre'].str.lower().str.contains(genre, na=False)]
+@app.route('/api/swiper')
+def swiper_data():
+    try:
+        if df.empty:
+            raise ValueError("No data available")
+            
+        if 'popularity' not in df.columns:
+            df['popularity'] = 50
+            
+        popular = df.sort_values('popularity', ascending=False).head(100)
+        swipe_pool = popular.sample(min(10, len(popular))).to_dict('records')
+        
+        # Add image URLs to each song
+        token = get_spotify_token()
+        for song in swipe_pool:
+            song['image_url'] = get_album_art(song['name'], song['artist'])
+        
+        session['swipe_pool'] = swipe_pool
+        session['liked_songs'] = []
+        session['disliked_songs'] = []
+        
+        return jsonify(swipe_pool)
+    except Exception as e:
+        print(f"Swiper error: {e}")
+        sample_songs = [{
+            "id": i+1,
+            "name": f"Sample Song {i+1}",
+            "artist": "Sample Artist",
+            "genre": "Pop",
+            "popularity": 50,
+            "image_url": "https://via.placeholder.com/300"  # Fallback image
+        } for i in range(10)]
+        
+        session['swipe_pool'] = sample_songs
+        session['liked_songs'] = []
+        session['disliked_songs'] = []
+        
+        return jsonify(sample_songs)
 
-    if filtered_df.empty:
-        return {'message': 'No matching songs found.'}
+@app.route('/swipe', methods=['POST'])
+def swipe():
+    try:
+        if 'swipe_pool' not in session:
+            raise ValueError("Session expired - please refresh")
+            
+        data = request.get_json()
+        if not data or 'song_id' not in data:
+            raise ValueError("Invalid swipe data")
+            
+        # Track liked songs
+        session.setdefault('liked_songs', []).append(int(data['song_id']))
+        print(f"Liked songs: {session['liked_songs']}")
+        
+        # Check if we've completed all swipes
+        if len(session.get('liked_songs', [])) + len(session.get('disliked_songs', [])) >= 10:
+            # Get recommendations based on liked songs
+            liked_songs = session.get('liked_songs', [])
+            
+            # If no songs were liked, return popular songs
+            if not liked_songs:
+                recommended = df.sort_values('popularity', ascending=False).head(5).to_dict('records')
+            else:
+                # Get recommendations based on liked songs
+                recommended = get_recommendations_based_on_likes(liked_songs)
+            
+            # Clear session data
+            session.pop('swipe_pool', None)
+            session.pop('liked_songs', None)
+            session.pop('disliked_songs', None)
+            
+            return jsonify({
+                "recommendations": recommended,
+                "message": "Based on your preferences"
+            })
+            
+        return jsonify({"status": "keep swiping"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
-    if 'popularity' in filtered_df.columns:
-        filtered_df = filtered_df.sort_values(by="popularity", ascending=False)
-
-    results = filtered_df[['name', 'artist', 'genre', 'popularity']].to_dict(orient="records")
-    return results
-
-# --- Logout ---
-@app.route('/logout')
-def logout():
-    session.pop('spotify_token', None)
-    return redirect(url_for('home'))
+@app.route('/test-spotify')
+def test_spotify():
+    token = get_spotify_token()
+    if not token:
+        return "Failed to get Spotify token"
+    
+    # Test with a known song
+    test_url = get_album_art("Blinding Lights", "The Weeknd")
+    return jsonify({
+        "token": token[:20] + "...",  # Don't expose full token
+        "test_image_url": test_url
+    })
 
 if __name__ == '__main__':
-    # Print debug info about Spotify config
-    print(f"Spotify Client ID: {SPOTIPY_CLIENT_ID}")
-    print(f"Spotify Redirect URI: {SPOTIPY_REDIRECT_URI}")
-    
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    initialize_recommendation_engine()  # Initialize the recommendation engine
+    app.run(debug=True, port=5000)

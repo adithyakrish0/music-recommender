@@ -3,3 +3,5 @@ spotipy
 pandas
 python-dotenv
 gunicorn
+scikit-learn
+numpy
