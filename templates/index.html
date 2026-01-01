@@ -5,18 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Harmonic | Music Discovery</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=Poppins:wght@200;300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #8e44ad;
-            --secondary: #3498db;
-            --accent: #1db954;
-            --dark: #121212;
-            --darker: #0a0a0a;
-            --light: #f5f5f5;
-            --gray: #b3b3b3;
-            --glass: rgba(255, 255, 255, 0.05);
-            --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            --primary: #1db954;
+            --primary-dark: #1aa34a;
+            --background: #121212;
+            --surface: #181818;
+            --surface-hover: #282828;
+            --text-main: #ffffff;
+            --text-secondary: #b3b3b3;
+            --error: #e74c3c;
         }
 
         * {
@@ -26,326 +25,332 @@
         }
 
         body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-            color: var(--light);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
             min-height: 100vh;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            overflow-x: hidden;
-            position: relative;
         }
 
-        .background-particles {
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            margin-bottom: 3rem;
+            text-align: center;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.05rem;
+        }
+
+        h1 span {
+            color: var(--primary);
+        }
+
+        .tagline {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .search-container {
+            width: 100%;
+            max-width: 600px;
+            position: relative;
+            margin-bottom: 3rem;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        #query {
+            width: 100%;
+            padding: 1rem 3rem 1rem 1.5rem;
+            border-radius: 50px;
+            border: none;
+            background-color: var(--text-main);
+            color: var(--background);
+            font-size: 1.1rem;
+            font-weight: 500;
+            outline: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #query:focus {
+            transform: scale(1.02);
+            box-shadow: 0 8px 30px rgba(29, 185, 84, 0.2);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 1.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--background);
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border-radius: 30px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            border: none;
+            font-size: 0.95rem;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: var(--background);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        .btn-secondary {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        #results {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--surface);
+            border-radius: 8px;
+            padding: 1rem;
+            transition: background-color 0.3s ease;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .card:hover {
+            background-color: var(--surface-hover);
+        }
+
+        .card-img-wrapper {
+            width: 100%;
+            padding-bottom: 100%; /* 1:1 Aspect Ratio */
+            position: relative;
+            background-color: #333;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .card-img {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 0;
-            overflow: hidden;
+            object-fit: cover;
+            transition: transform 0.3s ease;
         }
 
-        .particle {
-            position: absolute;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            animation: float 15s infinite linear;
-            opacity: 0.1;
+        .card:hover .card-img {
+            transform: scale(1.05);
         }
 
-        @keyframes float {
-            0% { transform: translateY(0) rotate(0deg); opacity: 0.1; }
-            50% { opacity: 0.3; }
-            100% { transform: translateY(-1000px) rotate(720deg); opacity: 0.1; }
+        .card-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
         }
 
-        .container {
-            width: 90%;
-            max-width: 800px;
-            background: rgba(18, 18, 18, 0.85);
-            backdrop-filter: blur(15px);
-            border-radius: 20px;
-            padding: 3rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            z-index: 1;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            position: relative;
-            overflow: hidden;
-            text-align: center;
-        }
-
-        .container::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(142, 68, 173, 0.2) 0%, transparent 70%);
-            z-index: -1;
-            animation: rotate 20s linear infinite;
-        }
-
-        @keyframes rotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        h1 {
-            font-family: 'Montserrat', sans-serif;
-            font-size: 3rem;
-            margin-bottom: 1.5rem;
-            background: linear-gradient(to right, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-
-        .tagline {
-            font-size: 1.2rem;
-            color: var(--gray);
-            margin-bottom: 2.5rem;
-        }
-
-        .search-box {
-            position: relative;
-            max-width: 600px;
-            margin: 0 auto 2rem;
-        }
-
-        #query {
-            width: 100%;
-            padding: 1.2rem 1.5rem;
-            border-radius: 50px;
-            border: none;
-            background: rgba(50, 50, 50, 0.5);
-            color: var(--light);
-            font-size: 1.1rem;
-            transition: var(--transition);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        #query:focus {
-            outline: none;
-            background: rgba(70, 70, 70, 0.7);
-            box-shadow: 0 0 0 3px rgba(142, 68, 173, 0.3);
-        }
-
-        .search-btn {
-            position: absolute;
-            right: 5px;
-            top: 5px;
-            background: var(--accent);
-            color: white;
-            border: none;
-            border-radius: 50px;
-            padding: 0.8rem 1.8rem;
+        .card-title {
             font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
+            font-size: 1rem;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .card-artist {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .card-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 0.5rem;
         }
 
-        .search-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(29, 185, 84, 0.3);
+        .genre-tag {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
         }
 
-        #results {
-            margin-top: 2rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .song-card {
-            background: var(--glass);
-            border-radius: 15px;
-            padding: 1.5rem;
-            transition: var(--transition);
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .song-card:hover {
-            transform: translateY(-5px);
-            background: rgba(255, 255, 255, 0.1);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-        }
-
-        .song-card h3 {
-            font-size: 1.3rem;
-            margin-bottom: 0.5rem;
-            color: var(--light);
-        }
-
-        .song-card p {
-            color: var(--gray);
-            font-size: 0.9rem;
-        }
-
-        .swipe-mode {
+        .loader {
             display: inline-block;
-            margin-top: 3rem;
-            padding: 0.8rem 1.8rem;
-            background: var(--primary);
-            color: white;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: var(--transition);
-            box-shadow: 0 5px 15px rgba(142, 68, 173, 0.3);
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin: 2rem auto;
         }
 
-        .swipe-mode:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(142, 68, 173, 0.4);
+        .error-msg {
+            color: var(--error);
+            text-align: center;
+            padding: 1rem;
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 8px;
+            width: 100%;
         }
 
-        .swipe-mode i {
-            margin-left: 8px;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
-        /* Music notes animation */
-        .music-note {
-            position: absolute;
-            color: rgba(255, 255, 255, 0.3);
-            font-size: 1.5rem;
-            animation: float-note 10s linear infinite;
-            z-index: -1;
-        }
-
-        @keyframes float-note {
-            0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-            10% { opacity: 0.5; }
-            90% { opacity: 0.5; }
-            100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
-        }
-
-        @media (max-width: 768px) {
-            h1 { font-size: 2.3rem; }
-            .container { padding: 2rem; }
-            #results { grid-template-columns: 1fr; }
+        @media (max-width: 600px) {
+            h1 { font-size: 2rem; }
+            .container { padding: 1rem; }
+            #results { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
         }
     </style>
 </head>
 <body>
-    <!-- Background particles -->
-    <div class="background-particles" id="particles"></div>
-    
-    <!-- Floating music notes -->
-    <div id="music-notes"></div>
-    
-    <!-- Main container -->
     <div class="container">
-        <h1>Discover Your Sound</h1>
-        <p class="tagline">Find your perfect music match with AI-powered recommendations</p>
-        
-        <div class="search-box">
-            <input type="text" id="query" placeholder="Song, artist, or genre...">
-            <button class="search-btn" onclick="getRecommendations()">
-                <i class="fas fa-search"></i> Search
-            </button>
+        <header>
+            <h1>Harmonic<span>.</span></h1>
+            <p class="tagline">Discover music that resonates with you</p>
+        </header>
+
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <input type="text" id="query" placeholder="What do you want to listen to?" autocomplete="off">
+                <i class="fas fa-search search-icon" onclick="getRecommendations()"></i>
+            </div>
         </div>
-        
+
+        <div class="actions">
+            <a href="/swiper" class="btn btn-secondary">
+                <i class="fas fa-layer-group"></i> Discovery Mode
+            </a>
+        </div>
+
         <div id="results"></div>
-        
-        <a href="/swiper" class="swipe-mode">
-            Try Swipe Mode <i class="fas fa-arrow-right"></i>
-        </a>
     </div>
 
     <script>
-        // Create background particles
-        document.addEventListener('DOMContentLoaded', function() {
-            const particlesContainer = document.getElementById('particles');
-            const particleCount = 30;
-            
-            for (let i = 0; i < particleCount; i++) {
-                const particle = document.createElement('div');
-                particle.classList.add('particle');
-                
-                // Random properties
-                const size = Math.random() * 10 + 5;
-                const posX = Math.random() * 100;
-                const posY = Math.random() * 100;
-                const delay = Math.random() * 15;
-                const duration = Math.random() * 10 + 10;
-                
-                particle.style.width = `${size}px`;
-                particle.style.height = `${size}px`;
-                particle.style.left = `${posX}%`;
-                particle.style.top = `${posY}%`;
-                particle.style.animationDelay = `${delay}s`;
-                particle.style.animationDuration = `${duration}s`;
-                
-                particlesContainer.appendChild(particle);
-            }
-            
-            // Create floating music notes
-            const notesContainer = document.getElementById('music-notes');
-            const noteIcons = ['♩', '♪', '♫', '♬', '♭', '♮', '♯'];
-            const noteCount = 12;
-            
-            for (let i = 0; i < noteCount; i++) {
-                const note = document.createElement('div');
-                note.classList.add('music-note');
-                note.textContent = noteIcons[Math.floor(Math.random() * noteIcons.length)];
-                
-                // Random properties
-                const posX = Math.random() * 100;
-                const delay = Math.random() * 10;
-                const duration = Math.random() * 5 + 10;
-                
-                note.style.left = `${posX}%`;
-                note.style.animationDelay = `${delay}s`;
-                note.style.animationDuration = `${duration}s`;
-                
-                notesContainer.appendChild(note);
-            }
-        });
+        const queryInput = document.getElementById('query');
+        const resultsContainer = document.getElementById('results');
 
-        async function getRecommendations() {
-            const query = document.getElementById('query').value.trim();
-            if (!query) return;
-            
-            const resultsContainer = document.getElementById('results');
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        const handleSearch = async () => {
+            const query = queryInput.value.trim();
+            if (!query) {
+                resultsContainer.innerHTML = '';
+                return;
+            }
+
             resultsContainer.innerHTML = '<div class="loader"></div>';
-            
+
             try {
                 const response = await fetch(`/recommend?query=${encodeURIComponent(query)}`);
                 const songs = await response.json();
-                
+
                 if (songs.length === 0) {
-                    resultsContainer.innerHTML = '<p class="no-results">No matching songs found. Try a different search.</p>';
+                    resultsContainer.innerHTML = '<div class="error-msg">No results found. Try a different artist or genre.</div>';
                     return;
                 }
-                
-                let html = '';
-                songs.forEach(song => {
-                    html += `
-                        <div class="song-card">
-                            <h3>${song.name}</h3>
-                            <p>${song.artist}</p>
-                            <p class="genre">${song.genre}</p>
+
+                resultsContainer.innerHTML = songs.map(song => {
+                    // Use provided image or fallback
+                    const imgUrl = song.image_url || `https://via.placeholder.com/300x300/181818/b3b3b3?text=${encodeURIComponent(song.name[0])}`;
+
+                    return `
+                        <div class="card">
+                            <div class="card-img-wrapper">
+                                <img src="${imgUrl}" alt="${song.name}" class="card-img" loading="lazy">
+                            </div>
+                            <div class="card-content">
+                                <div class="card-title" title="${song.name}">${song.name}</div>
+                                <div class="card-artist" title="${song.artist}">${song.artist}</div>
+                                <div class="card-meta">
+                                    <span class="genre-tag">${song.genre}</span>
+                                </div>
+                            </div>
                         </div>
                     `;
-                });
-                resultsContainer.innerHTML = html;
-            } catch (error) {
-                resultsContainer.innerHTML = '<p class="error">Could not load recommendations. Please try again.</p>';
-                console.error('Error:', error);
-            }
-        }
+                }).join('');
 
-        // Handle Enter key press
-        document.getElementById('query').addEventListener('keypress', function(e) {
+            } catch (error) {
+                console.error(error);
+                resultsContainer.innerHTML = '<div class="error-msg">Something went wrong. Please try again.</div>';
+            }
+        };
+
+        const debouncedSearch = debounce(handleSearch, 500);
+
+        queryInput.addEventListener('input', debouncedSearch);
+        queryInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                getRecommendations();
+                handleSearch();
             }
         });
     </script>
