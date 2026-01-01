@@ -1,315 +1,355 @@
-from flask import Flask, render_template, request, jsonify, session
-from flask_caching import Cache
-import pandas as pd
+import os
+import time
+import json
 import random
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from collections import defaultdict
+import logging
+import pandas as pd
+import numpy as np
 import requests
 from requests.auth import HTTPBasicAuth
+from flask import Flask, render_template, request, jsonify, session
+from flask_caching import Cache
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.neighbors import BallTree, NearestNeighbors
-from scipy.sparse import csr_matrix
-import numpy as np
+from sklearn.neighbors import NearestNeighbors
+from scipy.sparse import hstack
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"  # Change this to a real secret key
+app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_harmonic_recommender')
 
 # Configure cache
 cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
 cache.init_app(app)
 
-# Spotify API credentials
-SPOTIFY_CLIENT_ID = '8a1446211a6648adb16de14a18991937'
-SPOTIFY_CLIENT_SECRET = '14a27936b1a548a79cef56500fcec1f3'
+# Spotify Credentials
+SPOTIFY_CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID', '8a1446211a6648adb16de14a18991937')
+SPOTIFY_CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET', '14a27936b1a548a79cef56500fcec1f3')
 
-# Load music data with better error handling
-try:
-    df = pd.read_csv("spotify.csv")
+class SpotifyClient:
+    def __init__(self, client_id, client_secret):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.token = None
+        self.token_expiry = 0
     
-    # Standardize column names
-    df.rename(columns={
-        'track_name': 'name', 
-        'artists': 'artist', 
-        'track_genre': 'genre'
-    }, inplace=True)
-    
-    # Clean data
-    df.dropna(subset=['name', 'artist', 'genre'], inplace=True)
-    df['artist'] = df['artist'].str.split(';').str[0]
-    df['artist'] = df['artist'].str.replace(r'[\[\]\'"]', '', regex=True)
-    
-    # Handle popularity
-    if 'popularity' not in df.columns:
-        df['popularity'] = 50
-    else:
-        df['popularity'] = df['popularity'].clip(0, 100)
-    
-    # Create features for recommendation
-    df['combined_features'] = (df['artist'] + ' ' + df['genre'] + ' ' + 
-                             df['name'] + ' ' + 
-                             df['danceability'].astype(str) + ' ' +
-                             df['energy'].astype(str))
-    
-    print(f"Loaded {len(df)} songs") 
-except Exception as e:
-    print(f"Error loading data: {e}")
-    # Create fallback dataframe
-    df = pd.DataFrame([{
-        'id': i+1,
-        'name': f"Sample Song {i+1}", 
-        'artist': "Sample Artist", 
-        'genre': "Pop",
-        'popularity': 50
-    } for i in range(10)])
-
-tfidf_matrix = None
-similarity_matrix = None
-feature_matrix = None
-vectorizer = None
-
-def initialize_recommendation_engine():
-    global feature_matrix, vectorizer, df  # Add 'df' to the global declaration
-    try:
-        # Only vectorize text features
-        vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
-        tfidf_matrix = vectorizer.fit_transform(df['combined_features'])
+    def get_token(self):
+        if self.token and time.time() < self.token_expiry:
+            return self.token
         
-        # Select and scale audio features
-        audio_features = ['danceability', 'energy', 'valence', 'tempo']
-        audio_scaler = MinMaxScaler()
-        audio_matrix = audio_scaler.fit_transform(df[audio_features])
-        
-        # Combine features (weight audio more heavily)
-        feature_matrix = csr_matrix(np.hstack([
-            audio_matrix * 0.7,  # 70% weight to audio features
-            tfidf_matrix.toarray() * 0.3  # 30% weight to text
-        ]))
-        
-        print("Recommendation engine initialized successfully with sparse matrix")
-    except Exception as e:
-        print(f"Error initializing recommendation engine: {e}")
-        # Fallback to small random sample if initialization fails
-        df = df.sample(1000).reset_index(drop=True)
-        initialize_recommendation_engine()
+        try:
+            auth_url = 'https://accounts.spotify.com/api/token'
+            auth_response = requests.post(
+                auth_url,
+                auth=HTTPBasicAuth(self.client_id, self.client_secret),
+                data={'grant_type': 'client_credentials'},
+                timeout=5
+            )
+            auth_response.raise_for_status()
+            data = auth_response.json()
+            self.token = data.get('access_token')
+            self.token_expiry = time.time() + data.get('expires_in', 3600) - 60
+            return self.token
+        except Exception as e:
+            logger.error(f"Failed to get Spotify token: {e}")
+            return None
 
-def prepare_features(df):
-    """Prepare audio features for recommendation engine"""
-    # Select relevant audio features
-    audio_features = ['danceability', 'energy', 'loudness', 
-                    'speechiness', 'acousticness', 
-                    'instrumentalness', 'liveness', 
-                    'valence', 'tempo']
-    
-    # Normalize features
-    scaler = MinMaxScaler()
-    df[audio_features] = scaler.fit_transform(df[audio_features])
-    
-    # Combine with text features
-    tfidf = vectorizer.fit_transform(df['combined_features'])
-    audio_matrix = df[audio_features].values
-    
-    # Weight audio features more heavily than text
-    return np.hstack([audio_matrix * 0.7, tfidf.toarray() * 0.3])
+    def get_album_art(self, track_name, artist_name):
+        token = self.get_token()
+        if not token:
+            return None
+        
+        try:
+            headers = {'Authorization': f'Bearer {token}'}
+            # Search specifically for track and artist to be more accurate
+            q = f"track:{track_name} artist:{artist_name}"
+            search_url = 'https://api.spotify.com/v1/search'
+            params = {
+                'q': q,
+                'type': 'track',
+                'limit': 1
+            }
 
-def get_recommendations_based_on_likes(liked_song_ids, n=10):
-    try:
-        if not liked_song_ids or len(liked_song_ids) == 0:
-            return get_popular_fallback(n)
+            response = requests.get(search_url, headers=headers, params=params, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get('tracks', {}).get('items', [])
+                if items:
+                    images = items[0].get('album', {}).get('images', [])
+                    if images:
+                        return images[0]['url']
+        except Exception as e:
+            logger.error(f"Error fetching album art for {track_name}: {e}")
+        return None
+
+class MusicRecommender:
+    def __init__(self, data_path):
+        self.df = None
+        # Comprehensive audio features
+        self.audio_features = ['danceability', 'energy', 'loudness', 'speechiness', 'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo']
+        self.vectorizer = None
+        self.scaler = None
+        self.tfidf_matrix = None
+        self.audio_matrix = None
+        self.feature_matrix = None
+        self.nn_model = None
+        self.load_data(data_path)
+        self.prepare_features()
+
+    def load_data(self, path):
+        try:
+            self.df = pd.read_csv(path)
             
-        # Get indices of liked songs
-        liked_indices = df[df['id'].isin(liked_song_ids)].index
-        
-        # Use BallTree for efficient nearest neighbor search
-        tree = BallTree(feature_matrix, metric='euclidean')
-        
-        # Get average features of liked songs
-        avg_features = feature_matrix[liked_indices].mean(axis=0)
-        
-        # Find similar songs (query 2x more than needed to filter out liked songs)
-        _, indices = tree.query(avg_features, k=min(n*2, len(df)))
-        
-        # Filter recommendations
-        recommendations = []
-        for idx in indices[0]:
-            song = df.iloc[idx].to_dict()
-            if song['id'] not in liked_song_ids and len(recommendations) < n:
-                recommendations.append(song)
-        
-        return recommendations if recommendations else get_popular_fallback(n)
-        
-    except Exception as e:
-        print(f"Recommendation error: {e}")
-        return get_popular_fallback(n)
+            # Standardize column names
+            rename_map = {
+                'track_name': 'name',
+                'artists': 'artist',
+                'track_genre': 'genre'
+            }
+            self.df.rename(columns={k: v for k, v in rename_map.items() if k in self.df.columns}, inplace=True)
 
-def get_popular_fallback(n):
-    """Fallback to popular songs when recommendations fail"""
-    return (df.sort_values('popularity', ascending=False)
-            .head(n)
-            .to_dict('records'))
+            # Clean data
+            cols_to_check = ['name', 'artist', 'genre'] + [f for f in self.audio_features if f in self.df.columns]
+            self.df.dropna(subset=cols_to_check, inplace=True)
 
-def get_hybrid_recommendations(query, n=10):
-    """Combine search and audio features for better results"""
-    try:
-        # Text-based search first
-        query_vec = vectorizer.transform([query])
-        text_scores = cosine_similarity(query_vec, tfidf_matrix).flatten()
-        
-        # Audio feature similarity
-        features = prepare_features(df)
-        knn = NearestNeighbors(n_neighbors=n*2, metric='cosine')
-        knn.fit(features)
-        _, audio_indices = knn.kneighbors(features.mean(axis=0).reshape(1, -1))
-        
-        # Combine results
-        combined_scores = []
-        for idx in range(len(df)):
-            score = text_scores[idx] * 0.4  # Weight text less
-            if idx in audio_indices:
-                audio_rank = np.where(audio_indices[0] == idx)[0]
-                if len(audio_rank) > 0:
-                    score += (1 - audio_rank[0]/len(audio_indices[0])) * 0.6
-            combined_scores.append(score)
-        
-        # Get top results
-        top_indices = np.argsort(combined_scores)[::-1][:n]
-        return df.iloc[top_indices].to_dict('records')
-    except Exception as e:
-        print(f"Hybrid recommendation error: {e}")
-        return get_popular_fallback(n)
+            # Clean artist names
+            self.df['artist'] = self.df['artist'].astype(str).str.split(';').str[0]
+            self.df['artist'] = self.df['artist'].str.replace(r'[\[\]\'"]', '', regex=True)
 
-def get_spotify_token():
-    auth_url = 'https://accounts.spotify.com/api/token'
-    auth_response = requests.post(
-        auth_url,
-        auth=HTTPBasicAuth(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET),
-        data={'grant_type': 'client_credentials'}
-    )
-    return auth_response.json().get('access_token')
+            # Handle popularity
+            if 'popularity' not in self.df.columns:
+                self.df['popularity'] = 50
+            else:
+                self.df['popularity'] = self.df['popularity'].clip(0, 100)
 
-def get_album_art(song_name, artist_name):
-    try:
-        token = get_spotify_token()
-        headers = {'Authorization': f'Bearer {token}'}
-        search_url = f'https://api.spotify.com/v1/search?q=track:{song_name} artist:{artist_name}&type=track&limit=1'
-        response = requests.get(search_url, headers=headers).json()
-        
-        if response.get('tracks', {}).get('items'):
-            return response['tracks']['items'][0]['album']['images'][0]['url']  # Largest image
-    except Exception as e:
-        print(f"Error fetching album art: {e}")
-    return None
+            # Create text features for search
+            self.df['text_features'] = (
+                self.df['name'].astype(str) + ' ' +
+                self.df['artist'].astype(str) + ' ' +
+                self.df['genre'].astype(str)
+            ).str.lower()
 
-# --- Main Page ---
+            # Reset index to ensure alignment
+            self.df = self.df.reset_index(drop=True)
+            self.df['id_internal'] = self.df.index  # Use internal index for lookups
+
+            logger.info(f"Loaded {len(self.df)} songs")
+
+        except Exception as e:
+            logger.error(f"Error loading data: {e}")
+            # Create minimal fallback dataframe
+            self.df = pd.DataFrame([{
+                'name': f"Song {i}", 'artist': "Artist", 'genre': "Pop",
+                'popularity': 50, 'text_features': f"song {i} artist pop",
+                **{feat: 0.5 for feat in self.audio_features}
+            } for i in range(10)])
+            self.df['id_internal'] = self.df.index
+
+    def prepare_features(self):
+        try:
+            # 1. Text Features (TF-IDF)
+            self.vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+            self.tfidf_matrix = self.vectorizer.fit_transform(self.df['text_features'])
+
+            # 2. Audio Features (Scaling)
+            # Ensure all audio features exist, fill missing with 0.5
+            for feat in self.audio_features:
+                if feat not in self.df.columns:
+                    self.df[feat] = 0.5
+
+            self.scaler = MinMaxScaler()
+            self.audio_matrix = self.scaler.fit_transform(self.df[self.audio_features])
+
+            # 3. Combined Features for Content-Based Filtering (Likes)
+            # We weight audio features more for "vibe" similarity
+            # Stack sparse tfidf and dense audio
+            self.feature_matrix = hstack([
+                self.audio_matrix * 0.8,         # 80% Audio
+                self.tfidf_matrix * 0.2          # 20% Text (Genre/Artist similarity)
+            ]).tocsr()
+
+            # 4. Initialize Nearest Neighbors
+            self.nn_model = NearestNeighbors(metric='cosine', algorithm='brute')
+            self.nn_model.fit(self.feature_matrix)
+
+            logger.info("Feature engineering complete.")
+
+        except Exception as e:
+            logger.error(f"Error in feature preparation: {e}")
+
+    def search(self, query, n=20):
+        """
+        Search for songs by text query.
+        Returns songs sorted by relevance and popularity.
+        """
+        if not query:
+            return []
+
+        try:
+            query_vec = self.vectorizer.transform([query.lower()])
+
+            # specific to text search, we only use tfidf_matrix
+            cosine_sim = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
+
+            # Get top matches
+            # We filter for relevance > 0
+            relevant_indices = np.where(cosine_sim > 0)[0]
+
+            if len(relevant_indices) == 0:
+                return []
+
+            # Sort by score
+            sorted_indices = relevant_indices[np.argsort(cosine_sim[relevant_indices])[::-1]]
+
+            # Take top 50 candidates, then sort by popularity to bubble up hits
+            candidates = sorted_indices[:50]
+
+            # Create a score that combines text match (high weight) and popularity (low weight)
+            # Normalize popularity to 0-1
+            pop_scores = self.df.iloc[candidates]['popularity'].values / 100.0
+            text_scores = cosine_sim[candidates]
+
+            final_scores = text_scores * 0.8 + pop_scores * 0.2
+
+            # Re-sort candidates by final score
+            final_top_indices = candidates[np.argsort(final_scores)[::-1]][:n]
+
+            return self.df.iloc[final_top_indices].to_dict('records')
+
+        except Exception as e:
+            logger.error(f"Search error: {e}")
+            return []
+
+    def recommend_from_likes(self, liked_indices, n=10):
+        """
+        Recommend songs based on a list of liked song INDICES (internal ids).
+        """
+        if not liked_indices:
+            return self.get_popular(n)
+
+        try:
+            # Create a user profile vector (average of liked songs)
+            user_profile = self.feature_matrix[liked_indices].mean(axis=0)
+
+            # Reshape to (1, n_features)
+            user_profile = np.asarray(user_profile).reshape(1, -1)
+
+            # Find neighbors
+            # We ask for more neighbors to filter out the ones already liked
+            n_neighbors = n + len(liked_indices) + 5
+            distances, indices = self.nn_model.kneighbors(user_profile, n_neighbors=n_neighbors)
+
+            recommendations = []
+            for idx in indices[0]:
+                if idx not in liked_indices:
+                    recommendations.append(self.df.iloc[idx].to_dict())
+                    if len(recommendations) >= n:
+                        break
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(f"Recommendation error: {e}")
+            return self.get_popular(n)
+
+    def get_popular(self, n=10):
+        return self.df.sort_values('popularity', ascending=False).head(n).to_dict('records')
+
+    def get_random_popular(self, n=10, top_k=200):
+        """Get random songs from the top K popular songs"""
+        top_songs = self.df.sort_values('popularity', ascending=False).head(top_k)
+        return top_songs.sample(min(n, len(top_songs))).to_dict('records')
+
+# Initialize components
+recommender = MusicRecommender("spotify.csv")
+spotify_client = SpotifyClient(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+
+# --- Routes ---
+
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# --- Recommendation API ---
 @app.route('/recommend')
-@cache.cached(timeout=300, query_string=True)
+@cache.cached(timeout=60, query_string=True)
 def recommend():
-    query = request.args.get('query', '').lower().strip()
-    
+    query = request.args.get('query', '').strip()
     if not query:
-        return jsonify({"error": "Empty query"}), 400
+        return jsonify([])
     
-    try:
-        results = get_hybrid_recommendations(query)
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    results = recommender.search(query)
 
-# --- Swiper Interface ---
+    # Enrich with images
+    # We do this asynchronously or on-demand usually, but for now we do it here for top 5
+    # to keep it snappy, maybe just first 3?
+    for song in results[:5]:
+        song['image_url'] = spotify_client.get_album_art(song['name'], song['artist'])
+
+    return jsonify(results)
+
 @app.route('/swiper')
 def swiper_view():
-    """Render the swiper interface template"""
     return render_template('swiper.html')
 
 @app.route('/api/swiper')
 def swiper_data():
-    try:
-        if df.empty:
-            raise ValueError("No data available")
-            
-        if 'popularity' not in df.columns:
-            df['popularity'] = 50
-            
-        popular = df.sort_values('popularity', ascending=False).head(100)
-        swipe_pool = popular.sample(min(10, len(popular))).to_dict('records')
-        
-        # Add image URLs to each song
-        token = get_spotify_token()
-        for song in swipe_pool:
-            song['image_url'] = get_album_art(song['name'], song['artist'])
-        
-        session['swipe_pool'] = swipe_pool
-        session['liked_songs'] = []
-        session['disliked_songs'] = []
-        
-        return jsonify(swipe_pool)
-    except Exception as e:
-        print(f"Swiper error: {e}")
-        sample_songs = [{
-            "id": i+1,
-            "name": f"Sample Song {i+1}",
-            "artist": "Sample Artist",
-            "genre": "Pop",
-            "popularity": 50,
-            "image_url": "https://via.placeholder.com/300"  # Fallback image
-        } for i in range(10)]
-        
-        session['swipe_pool'] = sample_songs
-        session['liked_songs'] = []
-        session['disliked_songs'] = []
-        
-        return jsonify(sample_songs)
+    # Reset session for new swiper round
+    session['liked_indices'] = []
+
+    # Get a pool of songs to swipe on
+    # Mix of popular and random
+    songs = recommender.get_random_popular(n=10)
+
+    # Pre-fetch images for swiper (crucial for UX)
+    for song in songs:
+        song['image_url'] = spotify_client.get_album_art(song['name'], song['artist'])
+        # If no image, use placeholder
+        if not song.get('image_url'):
+             song['image_url'] = f"https://via.placeholder.com/300x300/121212/FFFFFF?text={song['name'][0]}"
+
+    # Store the pool in session mapping id to internal index if needed
+    # actually we just need to send them to frontend.
+    # Frontend sends back "id" or some identifier.
+    # We used "id_internal" in the dataframe.
+
+    return jsonify(songs)
 
 @app.route('/swipe', methods=['POST'])
 def swipe():
-    try:
-        if 'swipe_pool' not in session:
-            raise ValueError("Session expired - please refresh")
-            
-        data = request.get_json()
-        if not data or 'song_id' not in data:
-            raise ValueError("Invalid swipe data")
-            
-        # Track liked songs
-        session.setdefault('liked_songs', []).append(int(data['song_id']))
-        print(f"Liked songs: {session['liked_songs']}")
-        
-        # Check if we've completed all swipes
-        if len(session.get('liked_songs', [])) + len(session.get('disliked_songs', [])) >= 10:
-            recommendations = get_recommendations_based_on_likes(session['liked_songs'])
-            
-            # Clear session data
-            session.pop('swipe_pool', None)
-            session.pop('liked_songs', None)
-            session.pop('disliked_songs', None)
-            
-            return jsonify({
-                "recommendations": recommendations,
-                "message": "Based on your preferences"
-            })
-            
-        return jsonify({"status": "keep swiping"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    data = request.get_json()
+    song_id = data.get('song_id') # This should be the index or some unique ID
 
-@app.route('/test-spotify')
-def test_spotify():
-    token = get_spotify_token()
-    if not token:
-        return "Failed to get Spotify token"
+    if song_id is not None and song_id != -1:
+        # User liked this song
+        # In our simplified model, we trust the frontend sends back the `id_internal` or we find it.
+        # But `records` output of pandas might not include index unless we made it a column.
+        # We did: self.df['id_internal'] = self.df.index
+        
+        try:
+            idx = int(song_id)
+            session.setdefault('liked_indices', []).append(idx)
+        except:
+            pass
+            
+    # If frontend asks for recommendations (sent song_id -1 or logic handling)
+    # The frontend logic in original was: after 10 swipes, call endpoint.
+    # Here we can just return recommendations if we have enough likes or if requested.
+
+    # If this is a "finish" call (e.g. song_id == -1)
+    if song_id == -1 or len(session.get('liked_indices', [])) >= 5: # Threshold
+        recs = recommender.recommend_from_likes(session.get('liked_indices', []), n=10)
+
+        # Fetch images for recommendations
+        for song in recs:
+             song['image_url'] = spotify_client.get_album_art(song['name'], song['artist'])
+
+        return jsonify({"recommendations": recs})
     
-    # Test with a known song
-    test_url = get_album_art("Blinding Lights", "The Weeknd")
-    return jsonify({
-        "token": token[:20] + "...",  # Don't expose full token
-        "test_image_url": test_url
-    })
+    return jsonify({"status": "ok", "liked_count": len(session.get('liked_indices', []))})
 
 if __name__ == '__main__':
-    initialize_recommendation_engine()  # Initialize the recommendation engine
     app.run(debug=True, port=5000)
