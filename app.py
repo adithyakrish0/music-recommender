@@ -244,9 +244,26 @@ class MusicRecommender:
             distances, indices = self.nn_model.kneighbors(user_profile, n_neighbors=n_neighbors)
 
             recommendations = []
+            seen_tracks = set()
+
+            # Add liked songs to seen set to avoid recommending them again
+            for liked_idx in liked_indices:
+                try:
+                    song = self.df.iloc[liked_idx]
+                    key = (song['name'].lower().strip(), song['artist'].lower().strip())
+                    seen_tracks.add(key)
+                except:
+                    pass
+
             for idx in indices[0]:
                 if idx not in liked_indices:
-                    recommendations.append(self.df.iloc[idx].to_dict())
+                    song_data = self.df.iloc[idx].to_dict()
+                    key = (song_data['name'].lower().strip(), song_data['artist'].lower().strip())
+
+                    if key not in seen_tracks:
+                        recommendations.append(song_data)
+                        seen_tracks.add(key)
+
                     if len(recommendations) >= n:
                         break
 
@@ -280,7 +297,7 @@ def recommend():
     query = request.args.get('query', '').strip()
     if not query:
         return jsonify([])
-    
+
     results = recommender.search(query)
 
     # Enrich with images
