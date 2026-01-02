@@ -168,8 +168,8 @@ class MusicRecommender:
             # We weight audio features more for "vibe" similarity
             # Stack sparse tfidf and dense audio
             self.feature_matrix = hstack([
-                self.audio_matrix * 0.8,         # 80% Audio
-                self.tfidf_matrix * 0.2          # 20% Text (Genre/Artist similarity)
+                self.audio_matrix * 0.5,         # 50% Audio
+                self.tfidf_matrix * 0.5          # 50% Text (Genre/Artist similarity)
             ]).tocsr()
 
             # 4. Initialize Nearest Neighbors
@@ -205,15 +205,16 @@ class MusicRecommender:
             # Sort by score
             sorted_indices = relevant_indices[np.argsort(cosine_sim[relevant_indices])[::-1]]
 
-            # Take top 50 candidates, then sort by popularity to bubble up hits
-            candidates = sorted_indices[:50]
+            # Take top 100 candidates, then sort by popularity to bubble up hits
+            candidates = sorted_indices[:100]
 
             # Create a score that combines text match (high weight) and popularity (low weight)
             # Normalize popularity to 0-1
             pop_scores = self.df.iloc[candidates]['popularity'].values / 100.0
             text_scores = cosine_sim[candidates]
 
-            final_scores = text_scores * 0.8 + pop_scores * 0.2
+            # Weight text match significantly higher to ensure relevance
+            final_scores = text_scores * 0.9 + pop_scores * 0.1
 
             # Re-sort candidates by final score
             final_top_indices = candidates[np.argsort(final_scores)[::-1]][:n]
