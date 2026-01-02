@@ -201,17 +201,47 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
         }
 
-        .loader {
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-radius: 50%;
-            border-top-color: var(--primary);
-            animation: spin 1s infinite linear;
-            margin-bottom: 1rem;
+        .music-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            height: 60px;
+        }
+
+        .bar {
+            width: 8px;
+            background-color: var(--primary);
+            border-radius: 4px;
+            animation: bounce 1s ease-in-out infinite;
+        }
+
+        .bar:nth-child(1) { height: 20px; animation-delay: 0.1s; }
+        .bar:nth-child(2) { height: 40px; animation-delay: 0.3s; }
+        .bar:nth-child(3) { height: 60px; animation-delay: 0.5s; }
+        .bar:nth-child(4) { height: 40px; animation-delay: 0.2s; }
+        .bar:nth-child(5) { height: 25px; animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 100% { transform: scaleY(1); opacity: 0.7; }
+            50% { transform: scaleY(1.5); opacity: 1; }
+        }
+
+        .loader-text {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
         }
 
         /* Results View */
@@ -320,8 +350,14 @@
     </div>
 
     <div class="loader-container" id="loader">
-        <div class="loader"></div>
-        <p>Curating songs...</p>
+        <div class="music-bars">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
+        <p class="loader-text">Curating songs...</p>
     </div>
 
     <div class="stack-container" id="stack-container">
@@ -522,8 +558,17 @@
         async function finishSwiping() {
             stackContainer.style.display = 'none';
             controls.style.display = 'none';
-            loader.style.display = 'block';
-            loader.innerHTML = '<div class="loader"></div><p>Generating recommendations...</p>';
+            loader.style.display = 'flex';
+            loader.innerHTML = `
+                <div class="music-bars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+                <p class="loader-text">Generating recommendations...</p>
+            `;
             
             try {
                 const res = await fetch('/swipe', {

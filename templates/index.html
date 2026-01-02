@@ -59,7 +59,18 @@
                 return;
             }
 
-            resultsContainer.innerHTML = '<div class="loader"></div>';
+            resultsContainer.innerHTML = `
+                <div class="loader-container">
+                    <div class="music-bars">
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                    </div>
+                    <p class="loader-text">Searching for vibes...</p>
+                </div>
+            `;
 
             try {
                 const response = await fetch(`/recommend?query=${encodeURIComponent(query)}`);

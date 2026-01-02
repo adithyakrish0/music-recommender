@@ -13,3 +13,7 @@
 2026-01-02 17:09:44,576 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:09:44] "GET / HTTP/1.1" 200 -
 2026-01-02 17:09:44,634 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:09:44] "GET /static/css/styles.css?v=2 HTTP/1.1" 200 -
 2026-01-02 17:10:08,835 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:10:08] "GET /recommend?query=pop HTTP/1.1" 200 -
+2026-01-02 17:25:31,136 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:25:31] "GET /swiper HTTP/1.1" 200 -
+2026-01-02 17:25:33,781 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:25:33] "GET / HTTP/1.1" 200 -
+2026-01-02 17:25:33,896 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:25:33] "GET /static/css/styles.css?v=2 HTTP/1.1" 200 -
+2026-01-02 17:25:36,867 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:25:36] "GET /api/swiper HTTP/1.1" 200 -
